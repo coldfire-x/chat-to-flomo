@@ -24,7 +24,7 @@
     }
   },
   "background": {
-    "service_worker": "background.js"
+    "service_worker": "dist/background.js"
   },
   "content_scripts": [
     {
@@ -35,12 +35,12 @@
         "https://kimi.moonshot.cn/*",
         "https://deepseek.com/*"
       ],
-      "js": ["content.js"]
+      "js": ["dist/content.js"]
     }
   ],
   "web_accessible_resources": [
     {
-      "resources": ["images/*"],
+      "resources": ["images/*", "src/*", "dist/*"],
       "matches": ["<all_urls>"]
     }
   ],

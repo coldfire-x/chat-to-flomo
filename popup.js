@@ -1,18 +1,49 @@
 document.addEventListener('DOMContentLoaded', function() {
-  const flomoApiInput = document.getElementById('flomoApi');
+  // Tab switching functionality
+  const tabs = document.querySelectorAll('.tab');
+  const tabContents = document.querySelectorAll('.tab-content');
+  
+  tabs.forEach(tab => {
+    tab.addEventListener('click', () => {
+      const tabName = tab.getAttribute('data-tab');
+      
+      // Update active tab
+      tabs.forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+      
+      // Show active content
+      tabContents.forEach(content => {
+        content.classList.remove('active');
+        if (content.id === `${tabName}-tab`) {
+          content.classList.add('active');
+        }
+      });
+    });
+  });
+
+  // Form elements
+  const flomoWebhookInput = document.getElementById('flomoWebhook');
   const defaultTagInput = document.getElementById('defaultTag');
   const saveSettingsBtn = document.getElementById('saveSettings');
   const syncChatBtn = document.getElementById('syncChat');
   const chatTitleInput = document.getElementById('chatTitle');
-  const syncSection = document.getElementById('syncSection');
-  const statusMessage = document.getElementById('statusMessage');
+  const syncStatusMessage = document.getElementById('syncStatusMessage');
+  const settingsStatusMessage = document.getElementById('settingsStatusMessage');
+  
+  // Default platform settings - still kept for backward compatibility
+  const defaultPlatformSettings = {
+    openai: { enabled: true, tags: ['#openai', '#chatgpt'] },
+    claude: { enabled: true, tags: ['#claude'] },
+    kimi: { enabled: true, tags: ['#kimi'] },
+    deepseek: { enabled: true, tags: ['#deepseek'] },
+  };
   
   // Load saved settings
-  chrome.storage.sync.get(['flomoApi', 'defaultTag'], function(result) {
-    if (result.flomoApi) {
-      flomoApiInput.value = result.flomoApi;
-      syncSection.classList.remove('hidden');
+  chrome.storage.local.get(['flomoWebhook', 'defaultTag', 'platformSettings'], function(result) {
+    if (result.flomoWebhook) {
+      flomoWebhookInput.value = result.flomoWebhook;
     }
+    
     if (result.defaultTag) {
       defaultTagInput.value = result.defaultTag;
     }
@@ -20,20 +51,28 @@ document.addEventListener('DOMContentLoaded', function() {
   
   // Save settings
   saveSettingsBtn.addEventListener('click', function() {
-    const flomoApi = flomoApiInput.value.trim();
+    const flomoWebhook = flomoWebhookInput.value.trim();
     const defaultTag = defaultTagInput.value.trim();
     
-    if (!flomoApi) {
-      showStatus('Please enter your Flomo API key', 'error');
+    if (!flomoWebhook) {
+      showSettingsStatus('Please enter your Flomo webhook URL', 'error');
       return;
     }
     
-    chrome.storage.sync.set({
-      flomoApi: flomoApi,
-      defaultTag: defaultTag
+    // Validate webhook URL format
+    if (!flomoWebhook.startsWith('https://flomoapp.com/iwh/') && 
+        !flomoWebhook.startsWith('https://v.flomoapp.com/jwh/')) {
+      showSettingsStatus('Invalid Flomo webhook URL format', 'error');
+      return;
+    }
+    
+    // Save settings, keeping platformSettings for backward compatibility
+    chrome.storage.local.set({
+      flomoWebhook: flomoWebhook,
+      defaultTag: defaultTag,
+      platformSettings: defaultPlatformSettings
     }, function() {
-      showStatus('Settings saved successfully', 'success');
-      syncSection.classList.remove('hidden');
+      showSettingsStatus('Settings saved successfully', 'success');
     });
   });
   
@@ -55,59 +94,88 @@ document.addEventListener('DOMContentLoaded', function() {
       const hostname = url.hostname;
       
       if (!supportedPlatforms.some(platform => hostname.includes(platform))) {
-        showStatus('Not a supported AI chat platform', 'error');
+        showSyncStatus('Not a supported AI chat platform', 'error');
         return;
       }
       
-      // Get the chat title provided by user or extract from page
-      const userChatTitle = chatTitleInput.value.trim();
-      
-      // Send message to content script to get chat content
-      chrome.tabs.sendMessage(
-        currentTab.id,
-        { action: 'getChatContent', chatTitle: userChatTitle },
-        function(response) {
-          if (chrome.runtime.lastError) {
-            showStatus('Error: ' + chrome.runtime.lastError.message, 'error');
-            return;
-          }
+      // First check if webhook is configured
+      chrome.storage.local.get(['flomoWebhook'], function(result) {
+        if (!result.flomoWebhook) {
+          showSyncStatus('Error: Flomo webhook not configured. Please go to Settings tab and configure it.', 'error');
           
-          if (!response || !response.success) {
-            showStatus('Failed to get chat content: ' + (response?.message || 'Unknown error'), 'error');
-            return;
-          }
+          // Switch to settings tab
+          document.querySelector('.tab[data-tab="settings"]').click();
           
-          // Send to background script to sync with Flomo
-          chrome.runtime.sendMessage({
-            action: 'syncToFlomo',
-            chatContent: response.chatContent,
-            chatTitle: response.chatTitle,
-            platform: response.platform
-          }, function(syncResponse) {
+          return;
+        }
+        
+        // Get the chat title provided by user
+        const userChatTitle = chatTitleInput.value.trim();
+        
+        // Send message to content script to get chat content
+        chrome.tabs.sendMessage(
+          currentTab.id,
+          { action: 'getChatContent', chatTitle: userChatTitle },
+          function(response) {
             if (chrome.runtime.lastError) {
-              showStatus('Error: ' + chrome.runtime.lastError.message, 'error');
+              showSyncStatus('Error: ' + chrome.runtime.lastError.message, 'error');
               return;
             }
             
-            if (syncResponse.success) {
-              showStatus('Chat synchronized to Flomo successfully', 'success');
-            } else {
-              showStatus('Failed to sync to Flomo: ' + syncResponse.message, 'error');
+            if (!response || !response.success) {
+              showSyncStatus('Failed to get chat content: ' + (response?.message || 'Unknown error'), 'error');
+              return;
             }
-          });
-        }
-      );
+            
+            // Send to background script to sync with Flomo
+            chrome.runtime.sendMessage({
+              action: 'syncToFlomo',
+              data: {
+                content: response.chatContent,
+                title: response.chatTitle,
+                platform: response.platform
+              }
+            }, function(syncResponse) {
+              if (chrome.runtime.lastError) {
+                showSyncStatus('Error: ' + chrome.runtime.lastError.message, 'error');
+                return;
+              }
+              
+              if (syncResponse && syncResponse.success) {
+                showSyncStatus('Chat synchronized to Flomo successfully!', 'success');
+              } else {
+                showSyncStatus('Failed to sync to Flomo: ' + (syncResponse?.error || 'Unknown error'), 'error');
+              }
+            });
+          }
+        );
+      });
     });
   });
   
-  function showStatus(message, type) {
-    statusMessage.textContent = message;
-    statusMessage.className = 'status ' + type;
-    statusMessage.classList.remove('hidden');
+  // Show status in the sync tab
+  function showSyncStatus(message, type) {
+    showStatus(syncStatusMessage, message, type);
+  }
+  
+  // Show status in the settings tab
+  function showSettingsStatus(message, type) {
+    showStatus(settingsStatusMessage, message, type);
+  }
+  
+  // Generic function to show status
+  function showStatus(element, message, type) {
+    element.textContent = message;
+    element.className = 'status ' + type;
+    element.classList.remove('hidden');
+    element.classList.add('visible');
     
     // Hide status after 3 seconds
     setTimeout(() => {
-      statusMessage.classList.add('hidden');
+      element.classList.remove('visible');
+      setTimeout(() => {
+        element.classList.add('hidden');
+      }, 300);
     }, 3000);
   }
 }); 

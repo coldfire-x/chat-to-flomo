@@ -1,66 +1,64 @@
-// Listen for messages from popup or content scripts
-chrome.runtime.onMessage.addListener(function(request, sender, sendResponse) {
-  if (request.action === 'syncToFlomo') {
-    syncToFlomo(request, sendResponse);
-    return true; // Indicates async response
-  }
+import * as FlomoService from './src/utils/flomo-service.js';
+
+// Create a context menu option for syncing
+chrome.runtime.onInstalled.addListener(() => {
+  console.log('Extension installed');
+  
+  // Initialize storage
+  chrome.storage.local.get(['flomoWebhook', 'defaultTag', 'platformSettings'], (result) => {
+    if (!result.flomoWebhook) {
+      chrome.storage.local.set({ flomoWebhook: '' });
+    }
+    
+    if (!result.defaultTag) {
+      chrome.storage.local.set({ defaultTag: '#ai-chat' });
+    }
+    
+    if (!result.platformSettings) {
+      const defaultSettings = {
+        openai: { enabled: true, tags: ['#openai', '#chatgpt'] },
+        claude: { enabled: true, tags: ['#claude'] },
+        kimi: { enabled: true, tags: ['#kimi'] },
+        deepseek: { enabled: true, tags: ['#deepseek'] },
+      };
+      chrome.storage.local.set({ platformSettings: defaultSettings });
+    }
+  });
 });
 
-// Function to sync chat content to Flomo
-async function syncToFlomo(request, sendResponse) {
-  try {
-    // Get the API key from storage
-    const result = await chrome.storage.sync.get(['flomoApi', 'defaultTag']);
-    const flomoApi = result.flomoApi;
-    const defaultTagPrefix = result.defaultTag || '#ai-chat';
+// Listen for messages from content script or popup
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.action === 'syncToFlomo') {
+    // Handle sync to Flomo
+    console.log('Syncing to Flomo:', message.data);
     
-    if (!flomoApi) {
-      sendResponse({ success: false, message: 'Flomo API key not found. Please set it in the extension settings.' });
-      return;
-    }
-    
-    const { chatContent, chatTitle, platform } = request;
-    
-    // Create tag based on platform and chat title
-    let tag = `${defaultTagPrefix}/${platform}`;
-    if (chatTitle) {
-      tag += `/${chatTitle.replace(/\s+/g, '-')}`;
-    }
-    
-    // Prepare content for Flomo
-    let content = '';
-    
-    // Add title
-    if (chatTitle) {
-      content += `# ${chatTitle}\n\n`;
-    }
-    
-    // Add tag
-    content += `${tag}\n\n`;
-    
-    // Add chat content
-    content += chatContent;
-    
-    // Send to Flomo API
-    const response = await fetch(flomoApi, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        content: content
-      })
+    chrome.storage.local.get(['flomoWebhook', 'defaultTag'], (result) => {
+      if (!result.flomoWebhook) {
+        sendResponse({ success: false, error: 'Flomo webhook not configured' });
+        return;
+      }
+      
+      const { content, title, platform } = message.data;
+      const defaultTag = result.defaultTag || '#ai-chat';
+      
+      // Format content with tags using the format #ai-chat/{platform}/{chat title}
+      const formattedContent = FlomoService.formatFlomoContent(
+        title, 
+        content, 
+        platform, 
+        defaultTag
+      );
+      
+      // Send to Flomo
+      FlomoService.sendToFlomo(result.flomoWebhook, formattedContent)
+        .then(data => {
+          sendResponse({ success: true, data });
+        })
+        .catch(error => {
+          sendResponse({ success: false, error: error.message });
+        });
     });
     
-    const responseData = await response.json();
-    
-    if (responseData.code === 0) {
-      sendResponse({ success: true });
-    } else {
-      sendResponse({ success: false, message: responseData.message || 'Unknown error from Flomo API' });
-    }
-  } catch (error) {
-    console.error('Error syncing to Flomo:', error);
-    sendResponse({ success: false, message: error.message });
+    return true; // Keep the message channel open for async response
   }
-} 
+}); 

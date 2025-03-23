@@ -14,4 +14,18 @@ Thumbs.db
 *.sublime-workspace
 
 # Dependency directories
-node_modules/ 
+node_modules/
+
+# Build output
+dist/
+
+# npm
+package-lock.json 
+saveme.zip
+saveme-1.0.0.tgz
+
+package/
+task.md
+
+package.crx
+package.pem

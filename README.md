@@ -12,7 +12,7 @@ A Chrome extension that allows you to sync chat history from AI platforms (OpenA
 - Configurable Flomo API key
 - Automatically captures text and images from chat history
 - Organizes notes with customizable tags in the format: `#tag-prefix/platform/chat-title`
-- Elegant floating button in ChatGPT interface with smooth animations and visual feedback
+- Elegant floating button in ChatGPT and Claude interfaces with smooth animations and visual feedback
 
 ## Installation
 
@@ -30,7 +30,7 @@ A Chrome extension that allows you to sync chat history from AI platforms (OpenA
 4. Visit any supported AI chat platform
 5. When you want to save a conversation, you can either:
    - Click on the extension icon and click "Sync Current Chat"
-   - In ChatGPT, hover over the floating button at the bottom right and click to sync instantly
+   - In ChatGPT or Claude, hover over the floating button at the bottom right and click to sync instantly
 6. Optionally provide a custom title for the chat (when using the extension popup)
 7. The chat will be saved to your Flomo account with proper tagging
 
@@ -39,6 +39,36 @@ A Chrome extension that allows you to sync chat history from AI platforms (OpenA
 1. Log in to your Flomo account
 2. Go to Settings > API
 3. Copy your API key (it should look like: `https://flomoapp.com/iwh/xxxxxx/xxxxxxxx`)
+
+## Project Structure
+
+This project is designed with extensibility in mind, using a modular architecture:
+
+```
+src/
+  ├── content.js        # Main content script
+  ├── background.js     # Service worker script
+  ├── platforms/        # Platform-specific implementations
+  │   ├── openai/       # OpenAI ChatGPT support
+  │   ├── claude/       # Anthropic Claude support
+  │   ├── kimi/         # Kimi support (placeholder)
+  │   └── deepseek/     # DeepSeek support (placeholder)
+  └── utils/            # Shared utilities
+      ├── platform-interface.js   # Interface all platforms must implement
+      ├── platform-registry.js    # Registry for platform discovery
+      ├── flomo-service.js        # Handles Flomo API interactions
+      └── ui-utils.js             # UI elements and animations
+```
+
+## Contributing
+
+### Adding Support for a New Platform
+
+1. Create a new folder in `src/platforms/[platform-name]/`
+2. Create an `index.js` file that implements the `PlatformInterface` class
+3. Register your platform in `src/utils/platform-registry.js`
+
+See existing platforms for examples.
 
 ## Notes
 
