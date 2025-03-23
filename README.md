@@ -70,6 +70,12 @@ src/
 
 See existing platforms for examples.
 
+## Support the Project
+
+If you find this project helpful and would like to support its development, you can buy me a coffee! Your support helps maintain and improve the project.
+
+[![Buy me a coffee](./docs/bmc_qr.png)](buymeacoffee.com/pengphy)
+
 ## Notes
 
 - The extension requires access to read content from supported AI chat platforms
